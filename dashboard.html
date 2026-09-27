@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Smart Room — Live Energy Dashboard</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --page:        #0d0d0d;
+    --surface:     #1a1a19;
+    --surface-2:   #222221;
+    --ink:         #ffffff;
+    --ink-2:       #c3c2b7;
+    --muted:       #898781;
+    --grid:        #2c2c2a;
+    --baseline:    #383835;
+    --border:      rgba(255,255,255,0.10);
+    --series-1:    #3987e5;  /* blue  — power, indoor temp */
+    --series-2:    #199e70;  /* aqua  — outdoor temp */
+    --series-3:    #c98500;  /* yellow — accents */
+    --good:        #0ca30c;
+    --warning:     #fab219;
+    --critical:    #d03b3b;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--page); color: var(--ink); min-height: 100vh; padding: 20px; }
+  .wrap { max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+
+  /* ---------- header ---------- */
+  header { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 4px 2px; }
+  header h1 { font-size: 19px; font-weight: 650; letter-spacing: -0.01em; }
+  header .sub { color: var(--muted); font-size: 12.5px; }
+  .spacer { flex: 1; }
+  .statuspill {
+    display: inline-flex; align-items: center; gap: 7px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 999px; padding: 6px 13px; font-size: 12.5px; color: var(--ink-2);
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+  .dot.live { background: var(--good); box-shadow: 0 0 6px rgba(12,163,12,.6); }
+  .dot.stale { background: var(--warning); }
+  button {
+    font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+    border-radius: 8px; padding: 8px 16px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--ink);
+  }
+  button:hover { background: var(--surface-2); }
+  button.primary { background: var(--series-1); border-color: transparent; color: #fff; }
+  button.primary:hover { filter: brightness(1.1); }
+  #noserial {
+    display: none; background: var(--surface); border: 1px solid var(--warning);
+    border-radius: 10px; padding: 12px 16px; font-size: 13.5px; color: var(--ink-2);
+  }
+
+  /* ---------- tiles ---------- */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: 10px; }
+  .tile {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 13px 15px 12px; display: flex; flex-direction: column; gap: 3px; min-height: 92px;
+  }
+  .tile .label { font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+  .tile .value { font-size: 27px; font-weight: 650; line-height: 1.15; letter-spacing: -0.01em; }
+  .tile .value small { font-size: 14px; font-weight: 500; color: var(--ink-2); margin-left: 2px; }
+  .tile .foot { font-size: 12px; color: var(--muted); margin-top: auto; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .chip {
+    display: inline-block; font-size: 10.5px; font-weight: 700; letter-spacing: .05em;
+    border-radius: 5px; padding: 2px 7px; border: 1px solid var(--border); color: var(--ink-2);
+  }
+  .chip.on   { color: var(--good); border-color: var(--good); }
+  .chip.off  { color: var(--muted); }
+  .chip.forced { color: var(--warning); border-color: var(--warning); }
+  .mini { display: inline-flex; align-items: center; gap: 4px; }
+  .mini .dot { width: 6px; height: 6px; }
+
+  /* ---------- cards / charts ---------- */
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 860px) { .row2 { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 15px 16px 10px; position: relative;
+  }
+  .card h2 { font-size: 13.5px; font-weight: 650; color: var(--ink-2); margin-bottom: 2px; }
+  .card .h2sub { font-size: 11.5px; color: var(--muted); margin-bottom: 6px; }
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--ink-2); margin-bottom: 4px; }
+  .legend .key { display: inline-flex; align-items: center; gap: 6px; }
+  .legend .swatch { width: 10px; height: 10px; border-radius: 3px; }
+  svg.chart { width: 100%; height: auto; display: block; cursor: crosshair; }
+  .tooltip {
+    position: fixed; pointer-events: none; z-index: 10; display: none;
+    background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 7px 11px; font-size: 12px; color: var(--ink-2);
+    box-shadow: 0 4px 16px rgba(0,0,0,.5); white-space: nowrap;
+  }
+  .tooltip b { color: var(--ink); font-weight: 650; }
+  .tooltip .trow { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+  .tooltip .swatch { width: 8px; height: 8px; border-radius: 2px; }
+
+  /* ---------- billing strip ---------- */
+  .billing { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; align-items: stretch; }
+  .progresswrap { grid-column: 1 / -1; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 13px 15px; }
+  .progresswrap .toprow { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+  .bar { height: 8px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
+  .bar > div { height: 100%; width: 0%; background: var(--series-1); border-radius: 999px; transition: width .4s; }
+
+  /* ---------- console ---------- */
+  details.console { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+  details.console summary { cursor: pointer; padding: 11px 16px; font-size: 13px; color: var(--ink-2); font-weight: 600; list-style: none; }
+  details.console summary::before { content: "▸ "; color: var(--muted); }
+  details.console[open] summary::before { content: "▾ "; }
+  #rawlog {
+    font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; color: var(--ink-2);
+    max-height: 220px; overflow-y: auto; padding: 0 16px 12px; white-space: pre-wrap; word-break: break-all;
+  }
+  footer { color: var(--muted); font-size: 11.5px; text-align: center; padding: 6px 0 12px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <h1>⚡ Smart Room — Live Energy Dashboard</h1>
+      <div class="sub">ESP32 over USB serial · 115200 baud · TNB accelerated billing demo</div>
+    </div>
+    <div class="spacer"></div>
+    <span class="statuspill"><span class="dot" id="statusdot"></span><span id="statustext">Disconnected</span></span>
+    <button id="outagebtn" title="Trigger a simulated grid-failure event">⚡ Simulate outage</button>
+    <button id="demobtn" title="Preview the dashboard with fake data">Demo</button>
+    <button id="connectbtn" class="primary">Connect ESP32</button>
+  </header>
+
+  <div id="noserial">
+    ⚠️ This browser doesn't support Web Serial. Open this file in <b>Google Chrome</b> or <b>Microsoft Edge</b> on desktop.
+  </div>
+
+  <!-- ============ LIVE STATE TILES ============ -->
+  <div class="tiles">
+    <div class="tile">
+      <div class="label">Occupancy</div>
+      <div class="value" id="occval">—</div>
+      <div class="foot">
+        <span class="mini"><span class="dot" id="pirdot"></span>PIR</span>
+        <span class="mini"><span class="dot" id="radardot"></span>Radar</span>
+      </div>
+    </div>
+    <div class="tile">
+      <div class="label">LED Light</div>
+      <div class="value" id="ledval">—</div>
+      <div class="foot"><span class="chip" id="ledmode">MODE —</span><span id="ledpwr" style="color:var(--warning)"></span></div>
+    </div>
+    <div class="tile">
+      <div class="label">Ventilation Fan</div>
+      <div class="value" id="fanval">—</div>
+      <div class="foot"><span class="chip" id="fanmode">MODE —</span><span id="fanpwr" style="color:var(--warning)"></span></div>
+    </div>
+    <div class="tile">
+      <div class="label">Indoor Temp</div>
+      <div class="value"><span id="tinval">—</span><small>°C</small></div>
+      <div class="foot" id="tinfoot">DHT11 · GPIO 5</div>
+    </div>
+    <div class="tile">
+      <div class="label">Outdoor Temp</div>
+      <div class="value"><span id="toutval">—</span><small>°C</small></div>
+      <div class="foot" id="toutfoot">DHT11 · GPIO 4</div>
+    </div>
+    <div class="tile">
+      <div class="label">Scaled House Power</div>
+      <div class="value"><span id="hwval">—</span><small>W</small></div>
+      <div class="foot"><span id="protoval">—</span>&nbsp;W prototype · <span id="vival">—</span></div>
+    </div>
+  </div>
+
+  <!-- ============ CHARTS ============ -->
+  <div class="row2">
+    <div class="card">
+      <h2>House Power</h2>
+      <div class="h2sub">scaled watts · last 5 minutes</div>
+      <svg class="chart" id="powerchart" viewBox="0 0 560 240" role="img" aria-label="Line chart of scaled house power over the last five minutes"></svg>
+    </div>
+    <div class="card">
+      <h2>Temperature</h2>
+      <div class="legend">
+        <span class="key"><span class="swatch" style="background:var(--series-1)"></span>Indoor</span>
+        <span class="key"><span class="swatch" style="background:var(--series-2)"></span>Outdoor</span>
+      </div>
+      <svg class="chart" id="tempchart" viewBox="0 0 560 240" role="img" aria-label="Line chart of indoor and outdoor temperature over the last five minutes"></svg>
+    </div>
+  </div>
+
+  <!-- ============ ENERGY & BILLING ============ -->
+  <div class="billing">
+    <div class="tile">
+      <div class="label">Today's Energy</div>
+      <div class="value"><span id="twhval">—</span><small>Wh</small></div>
+      <div class="foot">cost RM <span id="trmval">—</span></div>
+    </div>
+    <div class="tile">
+      <div class="label">Estimated Saved Today</div>
+      <div class="value" style="color:var(--good)"><span id="swhval">—</span><small>Wh</small></div>
+      <div class="foot">vs. always-on baseline</div>
+    </div>
+    <div class="tile">
+      <div class="label">Lifetime Meter</div>
+      <div class="value"><span id="mkwhval">—</span><small>kWh</small></div>
+      <div class="foot">never resets</div>
+    </div>
+    <div class="tile">
+      <div class="label">This Billing Cycle</div>
+      <div class="value"><span id="ckwhval">—</span><small>kWh</small></div>
+      <div class="foot">meter Δ since cycle start<span id="ecoval" style="color:var(--warning)"></span></div>
+    </div>
+    <div class="tile">
+      <div class="label">Projected TNB Invoice</div>
+      <div class="value">RM <span id="crmval">—</span></div>
+      <div class="foot">RP4 · <span id="touval">ToU: —</span></div>
+    </div>
+    <div class="progresswrap">
+      <div class="toprow">
+        <span>Billing cycle progress (simulated ×43,200 speed)</span>
+        <span><b id="daysval" style="color:var(--ink)">—</b> / 30 days</span>
+      </div>
+      <div class="bar"><div id="daysbar"></div></div>
+    </div>
+  </div>
+
+  <!-- ============ RADAR DETAIL ============ -->
+  <div class="row2">
+    <div class="card">
+      <h2>LD2410 Radar Targets</h2>
+      <div class="h2sub" id="radarsub">waiting for data…</div>
+      <div class="tiles" style="grid-template-columns:1fr 1fr; margin-bottom:8px;">
+        <div class="tile" style="border:none; background:var(--surface-2);">
+          <div class="label">Stationary Target</div>
+          <div class="value" style="font-size:21px;"><span id="sdval">—</span><small>cm</small></div>
+          <div class="foot">signal energy <span id="seval">—</span></div>
+        </div>
+        <div class="tile" style="border:none; background:var(--surface-2);">
+          <div class="label">Moving Target</div>
+          <div class="value" style="font-size:21px;"><span id="mdval">—</span><small>cm</small></div>
+          <div class="foot">signal energy <span id="meval">—</span></div>
+        </div>
+      </div>
+    </div>
+    <details class="console" open>
+      <summary>Raw serial monitor</summary>
+      <div id="rawlog"></div>
+    </details>
+  </div>
+
+  <footer>Open in Chrome/Edge · close the Arduino IDE Serial Monitor before connecting (only one program can hold the COM port)</footer>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+"use strict";
+/* ============================================================
+   Rolling telemetry buffers (1 sample/second, keep 5 minutes)
+   ============================================================ */
+const MAX_POINTS = 300;
+const buf = { t: [], hw: [], tin: [], tout: [] };
+let latest = null;
+let lastPacketAt = 0;
+
+function pushSample(d) {
+  buf.t.push(Date.now());
+  buf.hw.push(d.hw);
+  buf.tin.push(d.tok ? d.tin : null);
+  buf.tout.push(d.tok ? d.tout : null);
+  for (const k of Object.keys(buf)) if (buf[k].length > MAX_POINTS) buf[k].shift();
+}
+
+/* ============================================================
+   Tiles
+   ============================================================ */
+const $ = id => document.getElementById(id);
+function setDot(el, on) { el.classList.toggle("live", !!on); }
+
+function updateTiles(d) {
+  $("occval").textContent = d.occ ? "OCCUPIED" : "EMPTY";
+  $("occval").style.color = d.occ ? "var(--good)" : "var(--muted)";
+  setDot($("pirdot"), d.pir);
+  setDot($("radardot"), d.rp);
+  $("radardot").classList.toggle("stale", !d.rc);
+
+  $("ledval").textContent = d.led ? "ON" : "OFF";
+  $("ledval").style.color = d.led ? "var(--ink)" : "var(--muted)";
+  $("fanval").textContent = d.fan ? "ON" : "OFF";
+  $("fanval").style.color = d.fan ? "var(--ink)" : "var(--muted)";
+  applyModeChip($("ledmode"), d.lm);
+  applyModeChip($("fanmode"), d.fm);
+  const noSupply = d.sup === 0; // older firmware without "sup" -> treated as powered
+  const gridDown = d.grid === 0;
+  $("ledpwr").textContent = noSupply ? "⚠ no 12V supply" : "";
+  $("fanpwr").textContent = gridDown ? "⚡ outage — fan shed" : (noSupply ? "⚠ no 12V supply" : "");
+  $("outagebtn").textContent = gridDown ? "⚡ Restore grid" : "⚡ Simulate outage";
+  $("outagebtn").style.borderColor = gridDown ? "var(--critical)" : "";
+  $("outagebtn").style.color = gridDown ? "var(--critical)" : "";
+  if (d.tou !== undefined) $("touval").textContent = "ToU: RM " + d.tou.toFixed(2) + " (pk " + d.pk.toFixed(2) + " / off " + d.ok.toFixed(2) + " kWh)";
+  $("ecoval").textContent = d.eco ? " · 🌿 eco tier " + d.eco + " (automation tightened)" : "";
+
+  $("tinval").textContent  = d.tok ? d.tin.toFixed(1) : "ERR";
+  $("toutval").textContent = d.tok ? d.tout.toFixed(1) : "ERR";
+  $("tinfoot").textContent  = d.tok ? "DHT11 · GPIO 5" : "sensor error — check wiring";
+  $("toutfoot").textContent = d.tok ? "DHT11 · GPIO 4" : "sensor error — check wiring";
+
+  $("hwval").textContent = Math.round(d.hw).toLocaleString();
+  $("protoval").textContent = d.pw.toFixed(2);
+  $("vival").textContent = d.v.toFixed(1) + " V / " + d.i.toFixed(0) + " mA";
+
+  $("twhval").textContent = d.twh.toFixed(1);
+  $("trmval").textContent = d.trm.toFixed(2);
+  $("swhval").textContent = d.swh.toFixed(1);
+  $("mkwhval").textContent = d.mkwh.toFixed(3);
+  $("ckwhval").textContent = d.ckwh.toFixed(3);
+  $("crmval").textContent = d.crm.toFixed(2);
+  $("daysval").textContent = d.days.toFixed(1);
+  $("daysbar").style.width = Math.min(100, d.days / 30 * 100) + "%";
+
+  $("radarsub").textContent = d.rc ? (d.rp ? "presence detected" : "no presence") : "radar not connected";
+  $("sdval").textContent = d.sd > 0 ? d.sd : "—";
+  $("seval").textContent = d.sd > 0 ? d.se : "—";
+  $("mdval").textContent = d.md > 0 ? d.md : "—";
+  $("meval").textContent = d.md > 0 ? d.me : "—";
+}
+
+function applyModeChip(el, mode) {
+  el.className = "chip";
+  if (mode === "AUTO")     { el.textContent = "AUTOMATION";  el.classList.add("on"); }
+  else if (mode === "ON")  { el.textContent = "FORCED ON";   el.classList.add("forced"); }
+  else if (mode === "OFF") { el.textContent = "FORCED OFF";  el.classList.add("forced"); }
+  else el.textContent = "MODE —";
+}
+
+/* ============================================================
+   SVG line chart (grid, 2px lines, end labels, crosshair tooltip)
+   ============================================================ */
+const NS = "http://www.w3.org/2000/svg";
+class LineChart {
+  constructor(svgId, series, unit, decimals = 0) {
+    this.svg = $(svgId);
+    this.series = series;          // [{key,label,cssVar}]
+    this.unit = unit;
+    this.dec = decimals;
+    this.W = 560; this.H = 240;
+    this.pad = { l: 46, r: 62, t: 12, b: 26 };
+    this.svg.addEventListener("mousemove", e => this.hover(e));
+    this.svg.addEventListener("mouseleave", () => this.hideHover());
+  }
+  color(s) { return getComputedStyle(document.documentElement).getPropertyValue(s.cssVar).trim(); }
+
+  render() {
+    const svg = this.svg;
+    svg.textContent = "";
+    const n = buf.t.length;
+    const { l, r, t, b } = this.pad;
+    const iw = this.W - l - r, ih = this.H - t - b;
+
+    // y bounds over all series (ignore nulls)
+    let vals = [];
+    for (const s of this.series) for (const v of buf[s.key]) if (v != null && isFinite(v)) vals.push(v);
+    if (!vals.length) vals = [0, 1];
+    let ymin = Math.min(...vals), ymax = Math.max(...vals);
+    if (ymin === ymax) { ymin -= 1; ymax += 1; }
+    const span = ymax - ymin;
+    ymin -= span * 0.12; ymax += span * 0.12;
+    if (this.unit === "W" && ymin > 0 && ymin < span * 0.5) ymin = 0; // anchor power near zero when close
+
+    const x = i => l + (n <= 1 ? iw / 2 : i / (n - 1) * iw);
+    const y = v => t + ih - (v - ymin) / (ymax - ymin) * ih;
+    this._x = x; this._y = y; this._ymin = ymin; this._ymax = ymax; this._n = n;
+
+    // gridlines + y tick labels (4 ticks)
+    for (let k = 0; k <= 3; k++) {
+      const vy = ymin + (ymax - ymin) * k / 3;
+      const py = y(vy);
+      this.line(l, py, this.W - r, py, "var(--grid)", 1);
+      this.text(l - 7, py + 3.5, this.fmt(vy), "end", "var(--muted)", 10.5);
+    }
+    // x time labels: oldest, middle, newest
+    if (n > 1) {
+      const idxs = [0, Math.floor((n - 1) / 2), n - 1];
+      const anchors = ["start", "middle", "end"];
+      idxs.forEach((i, k) => {
+        this.text(x(i), this.H - 8, timeLabel(buf.t[i]), anchors[k], "var(--muted)", 10.5);
+      });
+    }
+    // baseline
+    this.line(l, t + ih, this.W - r, t + ih, "var(--baseline)", 1);
+
+    // series lines + end labels
+    for (const s of this.series) {
+      const col = this.color(s);
+      let dstr = "", pen = false;
+      for (let i = 0; i < n; i++) {
+        const v = buf[s.key][i];
+        if (v == null || !isFinite(v)) { pen = false; continue; }
+        dstr += (pen ? "L" : "M") + x(i).toFixed(1) + " " + y(v).toFixed(1);
+        pen = true;
+      }
+      if (dstr) {
+        const p = document.createElementNS(NS, "path");
+        p.setAttribute("d", dstr);
+        p.setAttribute("fill", "none");
+        p.setAttribute("stroke", col);
+        p.setAttribute("stroke-width", "2");
+        p.setAttribute("stroke-linejoin", "round");
+        p.setAttribute("stroke-linecap", "round");
+        svg.appendChild(p);
+      }
+      // direct label at line end (value in ink, identity via colored tick)
+      let li = n - 1;
+      while (li >= 0 && (buf[s.key][li] == null || !isFinite(buf[s.key][li]))) li--;
+      if (li >= 0) {
+        const vy = y(buf[s.key][li]);
+        const c = document.createElementNS(NS, "circle");
+        c.setAttribute("cx", x(li)); c.setAttribute("cy", vy); c.setAttribute("r", 3.5);
+        c.setAttribute("fill", col);
+        svg.appendChild(c);
+        this.text(this.W - r + 8, vy + 3.5, this.fmt(buf[s.key][li]) + this.unit, "start", "var(--ink-2)", 11, 600);
+      }
+    }
+    // hover crosshair layer (re-created each render)
+    this.cross = document.createElementNS(NS, "line");
+    this.cross.setAttribute("stroke", "var(--baseline)");
+    this.cross.setAttribute("stroke-width", "1");
+    this.cross.setAttribute("y1", t); this.cross.setAttribute("y2", t + ih);
+    this.cross.style.display = "none";
+    svg.appendChild(this.cross);
+  }
+
+  fmt(v) {
+    if (Math.abs(v) >= 1000) return (v / 1000).toFixed(1) + "k";
+    return v.toFixed(this.dec);
+  }
+  line(x1, y1, x2, y2, stroke, w) {
+    const e = document.createElementNS(NS, "line");
+    e.setAttribute("x1", x1); e.setAttribute("y1", y1);
+    e.setAttribute("x2", x2); e.setAttribute("y2", y2);
+    e.setAttribute("stroke", stroke); e.setAttribute("stroke-width", w);
+    this.svg.appendChild(e);
+  }
+  text(px, py, str, anchor, fill, size, weight) {
+    const e = document.createElementNS(NS, "text");
+    e.setAttribute("x", px); e.setAttribute("y", py);
+    e.setAttribute("text-anchor", anchor);
+    e.setAttribute("fill", fill);
+    e.setAttribute("font-size", size);
+    if (weight) e.setAttribute("font-weight", weight);
+    e.textContent = str;
+    this.svg.appendChild(e);
+  }
+  hover(e) {
+    const n = this._n;
+    if (!n || n < 2 || !this.cross) return;
+    const rect = this.svg.getBoundingClientRect();
+    const vx = (e.clientX - rect.left) / rect.width * this.W;
+    const { l, r } = this.pad;
+    const iw = this.W - l - r;
+    let i = Math.round((vx - l) / iw * (n - 1));
+    i = Math.max(0, Math.min(n - 1, i));
+    const cx = this._x(i);
+    this.cross.setAttribute("x1", cx); this.cross.setAttribute("x2", cx);
+    this.cross.style.display = "";
+    const tip = $("tooltip");
+    let html = "<b>" + timeLabel(buf.t[i]) + "</b>";
+    for (const s of this.series) {
+      const v = buf[s.key][i];
+      html += '<div class="trow"><span class="swatch" style="background:' + this.color(s) + '"></span>'
+            + s.label + ": <b>" + (v == null ? "—" : v.toFixed(this.dec === 0 ? 1 : this.dec) + " " + this.unit) + "</b></div>";
+    }
+    tip.innerHTML = html;
+    tip.style.display = "block";
+    const tw = tip.offsetWidth;
+    tip.style.left = Math.min(window.innerWidth - tw - 12, e.clientX + 14) + "px";
+    tip.style.top = (e.clientY + 14) + "px";
+  }
+  hideHover() {
+    if (this.cross) this.cross.style.display = "none";
+    $("tooltip").style.display = "none";
+  }
+}
+function timeLabel(ms) {
+  const d = new Date(ms);
+  return d.toLocaleTimeString([], { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+const powerChart = new LineChart("powerchart", [{ key: "hw", label: "House power", cssVar: "--series-1" }], "W", 0);
+const tempChart  = new LineChart("tempchart", [
+  { key: "tin",  label: "Indoor",  cssVar: "--series-1" },
+  { key: "tout", label: "Outdoor", cssVar: "--series-2" },
+], "°C", 1);
+
+/* ============================================================
+   Telemetry intake (shared by serial + demo)
+   ============================================================ */
+function onTelemetry(d) {
+  latest = d;
+  lastPacketAt = Date.now();
+  pushSample(d);
+  updateTiles(d);
+  powerChart.render();
+  tempChart.render();
+}
+
+/* ============================================================
+   Raw log
+   ============================================================ */
+const rawlog = $("rawlog");
+let logLines = 0;
+function logLine(s) {
+  if (!s.trim()) return;
+  rawlog.textContent += s + "\n";
+  if (++logLines > 400) {                       // trim to last ~300 lines
+    const parts = rawlog.textContent.split("\n");
+    rawlog.textContent = parts.slice(parts.length - 300).join("\n");
+    logLines = 300;
+  }
+  rawlog.scrollTop = rawlog.scrollHeight;
+}
+
+/* ============================================================
+   Web Serial
+   ============================================================ */
+let port = null, reader = null, keepReading = false;
+const connectBtn = $("connectbtn");
+
+function setStatus(txt, cls) {
+  $("statustext").textContent = txt;
+  const dot = $("statusdot");
+  dot.className = "dot" + (cls ? " " + cls : "");
+}
+
+async function connectSerial() {
+  try {
+    port = await navigator.serial.requestPort();
+    await port.open({ baudRate: 115200 });
+  } catch (err) {
+    if (err.name !== "NotFoundError") alert("Could not open port: " + err.message +
+      "\n\nMake sure the Arduino IDE Serial Monitor is CLOSED — only one program can use the COM port at a time.");
+    port = null;
+    return;
+  }
+  stopDemo();
+  keepReading = true;
+  connectBtn.textContent = "Disconnect";
+  connectBtn.classList.remove("primary");
+  setStatus("Connected — waiting for data…", "stale");
+  readLoop();
+}
+
+async function readLoop() {
+  const decoder = new TextDecoder();
+  let carry = "";
+  try {
+    reader = port.readable.getReader();
+    while (keepReading) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      carry += decoder.decode(value, { stream: true });
+      let nl;
+      while ((nl = carry.indexOf("\n")) >= 0) {
+        const line = carry.slice(0, nl).replace(/\r$/, "");
+        carry = carry.slice(nl + 1);
+        handleLine(line);
+      }
+    }
+  } catch (err) {
+    logLine("[dashboard] serial error: " + err.message);
+  } finally {
+    try { reader && reader.releaseLock(); } catch (_) {}
+    try { port && await port.close(); } catch (_) {}
+    port = null;
+    keepReading = false;
+    connectBtn.textContent = "Connect ESP32";
+    connectBtn.classList.add("primary");
+    setStatus("Disconnected");
+  }
+}
+
+function handleLine(line) {
+  if (line.startsWith('{"tel"')) {
+    try { onTelemetry(JSON.parse(line)); setStatus("Live", "live"); return; }
+    catch (_) { /* partial/corrupt line — fall through to log */ }
+  }
+  logLine(line);
+}
+
+async function disconnectSerial() {
+  keepReading = false;
+  try { reader && await reader.cancel(); } catch (_) {}
+}
+
+connectBtn.addEventListener("click", () => (port ? disconnectSerial() : connectSerial()));
+
+// --- Commands TO the ESP32 (simulated grid events) ---
+async function sendCmd(s) {
+  if (!port || !port.writable) return;
+  try {
+    const w = port.writable.getWriter();
+    await w.write(new TextEncoder().encode(s + "\n"));
+    w.releaseLock();
+  } catch (err) { logLine("[dashboard] send failed: " + err.message); }
+}
+$("outagebtn").addEventListener("click", () => {
+  const down = latest && latest.grid === 0;
+  if (port) sendCmd(down ? "RESTORE" : "OUTAGE");
+  else if (demoTimer) demoOutage = !demoOutage;
+});
+
+if (!("serial" in navigator)) {
+  $("noserial").style.display = "block";
+  connectBtn.disabled = true;
+}
+navigator.serial && navigator.serial.addEventListener("disconnect", () => { if (port) disconnectSerial(); });
+
+// stale-data watchdog
+setInterval(() => {
+  if (port && lastPacketAt && Date.now() - lastPacketAt > 5000) setStatus("Connected — no data (5s)", "stale");
+}, 2000);
+
+/* ============================================================
+   Demo mode — preview without hardware
+   ============================================================ */
+let demoTimer = null, demoT = 0, demoMeter = 12.3456, demoCycleStart = 10.0, demoDays = 8.2, demoTwh = 140, demoSwh = 22;
+let demoOutage = false;
+function stopDemo() {
+  if (demoTimer) { clearInterval(demoTimer); demoTimer = null; demoOutage = false; $("demobtn").textContent = "Demo"; }
+}
+$("demobtn").addEventListener("click", () => {
+  if (demoTimer) { stopDemo(); setStatus("Disconnected"); return; }
+  if (port) disconnectSerial();
+  $("demobtn").textContent = "Stop demo";
+  setStatus("Demo data", "live");
+  demoTimer = setInterval(() => {
+    demoT++;
+    const occ = Math.sin(demoT / 25) > -0.55 ? 1 : 0;
+    const tin = 29 + Math.sin(demoT / 40) * 1.2 + Math.random() * 0.15;
+    const tout = 25.5 + Math.sin(demoT / 55 + 2) * 1.5 + Math.random() * 0.15;
+    let fan = occ && (tin - tout) >= 3 ? 1 : 0;
+    if (demoOutage) fan = 0;
+    const led = occ;
+    const pw = (led ? 1.05 : 0) + (fan ? 0.62 : 0) + (occ ? Math.random() * 0.06 : 0);
+    const hw = pw * 90; // must match SIMULATION_SCALE_FACTOR in the sketch
+    demoDays += 0.0028 * 43200 / 86400; if (demoDays >= 30) demoDays = 0;
+    demoMeter += hw / 1000 / 3600 * 12;
+    demoTwh += hw / 3600 * 12; demoSwh += occ ? 0 : 0.9;
+    const ckwh = demoMeter - demoCycleStart;
+    onTelemetry({
+      tel: 1, occ, pir: occ && Math.random() > .4 ? 1 : 0, rc: 1, rp: occ, sup: 1, grid: demoOutage ? 0 : 1,
+      eco: 0, pk: demoMeter * 0.3, ok: demoMeter * 0.7, tou: Math.max(3, (demoMeter - demoCycleStart) * 0.42),
+      led, fan, lm: "AUTO", fm: "AUTO", tok: 1,
+      tin: +tin.toFixed(1), tout: +tout.toFixed(1),
+      v: 11.9 + Math.random() * .1, i: pw / 12 * 1000, pw, hw,
+      twh: demoTwh, swh: demoSwh, trm: Math.max(3, demoTwh / 1000 * .4443),
+      mkwh: demoMeter, ckwh, crm: Math.max(3, ckwh * .4443),
+      days: demoDays,
+      sd: occ ? 120 + Math.round(Math.random() * 30) : 0, se: occ ? 40 + Math.round(Math.random() * 40) : 0,
+      md: occ && Math.random() > .5 ? 90 + Math.round(Math.random() * 60) : 0, me: occ ? 30 + Math.round(Math.random() * 50) : 0,
+    });
+  }, 1000);
+});
+</script>
+</body>
+</html>
