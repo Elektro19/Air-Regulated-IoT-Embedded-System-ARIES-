@@ -1,0 +1,32 @@
+# Arduino IDE build artifacts
+build/
+*.bin
+*.elf
+*.hex
+*.map
+
+# Arduino IDE sketch backups
+*.ino.bak
+*~
+
+# PlatformIO (if used instead of/alongside Arduino IDE)
+.pio/
+.pioenvs/
+.piolibdeps/
+
+# VS Code
+.vscode/
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Secrets / local config (create a config_secrets.h or similar for real credentials
+# and list it here instead of hardcoding WiFi passwords etc. in the main .ino)
+config_secrets.h
+*.env
+
+# Editor swap/temp files
+*.swp
+*.swo
