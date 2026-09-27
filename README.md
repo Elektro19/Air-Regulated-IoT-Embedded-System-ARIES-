@@ -1,13 +1,11 @@
 # Air-Regulated-IoT-Embedded-System-ARIES-
-ESP32 smart room prototype: occupancy-fused automation (PIR + mmWave radar), real measured power billed through Malaysia's TNB RP4 tariff with tariff-tier-aware automation, and a local OLED + web energy dashboard.
-# Smart Room — Occupancy-Aware Energy Automation & Real-Time TNB Billing System
 
 An ESP32-based smart hostel/home room prototype that automates lighting and ventilation based on real occupancy and environmental conditions, while measuring genuine electrical power draw and modeling it through Malaysia's actual TNB RP4 residential electricity tariff — including live tariff-tier-aware automation, a perpetual meter register, and a resident-facing energy awareness display.
 
-Built for [exhibition/competition name — fill in] at Universiti Teknologi PETRONAS (UTP).
+Built for Engineering Team Project (ETP) at Universiti Teknologi PETRONAS (UTP).
 
-![Demo](media/demo.gif)
-*(Replace with an actual GIF/photo of the OLED dashboard or the fan/LED responding to occupancy — this is the single most important visual in this README.)*
+<img width="1280" height="960" alt="photo_2026-09-27_19-59-19" src="https://github.com/user-attachments/assets/afee4497-8d59-49ff-b092-ca24539aab6e" />
+
 
 ---
 
@@ -19,13 +17,13 @@ Built for [exhibition/competition name — fill in] at Universiti Teknologi PETR
 - **Tariff-tier-aware automation** — as simulated billing-cycle consumption crosses TNB's real tariff boundaries (600 kWh / 1500 kWh), the automation itself becomes stricter — shorter occupancy hold time, tighter temperature threshold — since each additional kWh costs more once a boundary is crossed.
 - **Perpetual meter register** — the lifetime energy meter never resets, mirroring how a real utility meter works; billing is calculated from the difference between two readings across a billing cycle, not from a naive running total.
 - **Temperature-differential fan control** — dual DHT11 sensors (indoor + outdoor) drive the fan only when outdoor air is meaningfully cooler than indoor, with a hysteresis threshold to prevent rapid on/off flapping on marginal readings.
-- **3-state manual override** — every automated load can be forced `ON`, forced `OFF` (e.g. for a resident who is unwell), or left in `AUTOMATION`, using a quick-tap vs. hold-down gesture on a single physical switch.
+- **3-state manual override** — every automated load can be forced `ON`, forced `OFF` or left in `AUTOMATION`, using a quick-tap vs. hold-down gesture on a single physical switch.
 - **Energy-saving counter** — tracks today's actual consumption against a continuous-run baseline to show real avoided energy (Wh) and cost (RM).
-- **In-room OLED awareness display** — a live dashboard physically inside the room, addressing the occupant-awareness gap identified in hostel energy audit literature (see References).
-- **Local WiFi dashboard** — the ESP32 hosts its own Access Point and a read-only live web dashboard, viewable by any phone at the booth, with no internet dependency.
+- **In-room OLED awareness display** — a live dashboard physically inside the room, addressing the occupant-awareness gap identified in hostel energy audit literature
+- **Local WiFi dashboard** — the ESP32 hosts its own Access Point and a read-only live web dashboard
 - **NVS persistence** — the meter reading and billing cycle state survive power loss and reboot.
 - **Outage-aware load shedding** — a battery-backed rail keeps the low-power/essential load (LED) running during a mains outage, while the high-draw load (fan) is automatically shed, detected via current sensing on the mains-side supply.
-- **Cloud dashboard** — [teammate's name]'s companion component pushes/stores data for remote access. See [Cloud Component](#cloud-component-teammate-contribution) below.
+- **Companion USB-connected dashboard** — a separate local web dashboard application, developed by a teammate, that connects to the ESP32 over USB serial to visualize live telemetry. 
 
 ---
 
@@ -42,12 +40,12 @@ Built for [exhibition/competition name — fill in] at Universiti Teknologi PETR
                       │
         ┌─────────────┼─────────────┬──────────────┐
         │              │             │              │
-   [OLED Display] [Relay Module] [Local Web AP] [Cloud Sync →
-    (in-room)      → LED / Fan     Dashboard      teammate's
-                                                    component]
+   [OLED Display] [Relay Module] [Local Web AP] [USB Serial →
+    (in-room)      → LED / Fan     Dashboard      Teammate's
+                                                    Dashboard App]
 ```
 
-*(Replace with an actual diagram image in `docs/system_architecture.png` if you have one from your report — it reads much faster than ASCII.)*
+
 
 ---
 
@@ -59,7 +57,7 @@ Built for [exhibition/competition name — fill in] at Universiti Teknologi PETR
 | PIR motion sensor | included in sensor suite |
 | LD2410 mmWave radar sensor | included in sensor suite |
 | DHT11 temperature/humidity sensors (x2) | included in sensor suite |
-| Sensor suite subtotal | 60 |
+| Sensor suite subtotal | 70 |
 | Relay control module (2-channel used) | 15 |
 | DC cooling fan | 20 |
 | INA219 current/voltage sensor | 10 |
@@ -68,17 +66,16 @@ Built for [exhibition/competition name — fill in] at Universiti Teknologi PETR
 | Acrylic enclosure/casing | 60 |
 | Power adapters & wiring | 40 |
 | Breadboard + jumper wires | 10 |
-| Prototype testing & miscellaneous | 50 |
-| **Total prototype BOM** | **~RM 340–400** |
+| **Total prototype BOM** | **~RM 300–400** |
 
 ---
 
 ## Tech Stack
 
-- **Firmware:** Arduino / C++ on ESP32
+- **Firmware:** Arduino(software) used to program the ESP32 with a C Programming Language code
 - **Key libraries:** [`ld2410`](https://github.com/ncmreynolds/ld2410), Adafruit `INA219`, Adafruit `SSD1306` / `GFX`, Adafruit `DHT`, `Preferences` (NVS), `WiFi.h` / `WebServer.h`
-- **Local dashboard:** self-hosted HTML/JS served directly from the ESP32
-- **Cloud component:** [fill in teammate's stack — e.g., Firebase / a specific backend]
+**Local dashboard:** self-hosted HTML/JS served directly from the ESP32 over its own WiFi Access Point
+**Companion dashboard app:** built and maintained by a teammate; connects to the ESP32 over USB serial.
 
 ---
 
@@ -96,7 +93,6 @@ Built for [exhibition/competition name — fill in] at Universiti Teknologi PETR
 ```
 ├── firmware/              ESP32 Arduino sketch (main automation + billing logic)
 ├── web_dashboard/          Local dashboard served by the ESP32
-├── cloud_component/        Teammate's cloud sync/storage component (see below)
 ├── docs/                   Circuit diagrams, architecture diagrams, demo photos
 ├── report/                 Final project report (optional)
 └── media/                  Demo GIF/video
@@ -111,7 +107,7 @@ Built for [exhibition/competition name — fill in] at Universiti Teknologi PETR
 3. Open `firmware/smart_room_main/smart_room_main.ino`.
 4. Update pin definitions if your wiring differs (see pinout table below).
 5. Flash to an ESP32 dev board.
-6. On boot, the device creates its own WiFi Access Point (`SmartRoom_Demo` by default) — connect and browse to the IP shown in Serial Monitor to view the live dashboard.
+6. On boot, the device creates its own WiFi Access Point (SmartRoom_Demo by default) — connect and browse to the IP shown in Serial Monitor to view this repository's built-in live dashboard.
 
 ### Pin Reference
 
@@ -133,31 +129,11 @@ Built for [exhibition/competition name — fill in] at Universiti Teknologi PETR
 - Current build is breadboard-based; a soldered/PCB revision would remove the intermittent connection issues encountered during development.
 - Planned but not yet implemented: per-branch current sensing for true (not attribution-based) per-appliance monitoring, multi-room ESP-NOW mesh scaling, and a maintenance-safety digital interlock.
 
-See the full report in `/report` for the complete Sustainability & Future Recommendations discussion.
+See the full report in /report for the complete Sustainability & Future Recommendations discussion.
 
----
-
-## Team & Contributions
+Team & Contributions
 
 This was a team project. To keep contributions clear:
 
-- **[Your name] — Levinesh:** Firmware and system integration — occupancy fusion logic, TNB billing engine, tariff-tier-aware automation, sensor/relay/power hardware integration and debugging, OLED and local web dashboard, Sustainability & Future Recommendations report section.
-- **[Teammate's name]:** Cloud database/dashboard component — see `cloud_component/` and her own repository: [link].
-
-A separate combined repository documenting this same project from her perspective is also available at: [link].
-
----
-
-## References
-
-Key sources that informed the project's design — see the full report for the complete reference list.
-
-- Ng, T. F., et al. (2017). Energy consumption in student hostels of Universiti Sains Malaysia. In *Handbook of Theory and Practice of Sustainable Development in Higher Education*. Springer.
-- Tenaga Nasional Berhad (2025). RP4 tariff restructuring documentation.
-- [Add remaining key citations from your report as desired.]
-
----
-
-## License
-
-This project is licensed under the MIT License — see [`LICENSE`](LICENSE) for details.
+Elektro19 — Levinesh: Firmware and system integration — occupancy fusion logic, TNB billing engine, tariff-tier-aware automation, sensor/relay/power hardware integration and debugging, OLED and local web dashboard, Sustainability & Future Recommendations report section.
+Natalie: Designed and built a companion dashboard application that connects to the ESP32 over USB serial to visualize live telemetry. This component is maintained separately and is not included in this repository.
