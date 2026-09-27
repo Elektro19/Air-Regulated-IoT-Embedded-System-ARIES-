@@ -23,14 +23,14 @@ Built for Engineering Team Project (ETP) at Universiti Teknologi PETRONAS (UTP).
 - **Local WiFi dashboard** — the ESP32 hosts its own Access Point and a read-only live web dashboard
 - **NVS persistence** — the meter reading and billing cycle state survive power loss and reboot.
 - **Real supply-state sensing + demo-triggered outage simulation** — actual 5V-rail voltage is sensed to distinguish backup-battery-only operation from normal supply (so reported LED/fan state always reflects reality); a separate OUTAGE/RESTORE command, sent over the same USB link, lets the dashboard stage a load-shedding demonstration on demand — the fan (high-draw channel) is shed while the battery-backed LED stays on essential automation.
-**USB serial telemetry** — the ESP32 streams a compact JSON line of live sensor, automation, and billing state over USB once per second, consumed by a companion dashboard application built by a teammate
+**USB serial telemetry + browser-based live dashboard — the ESP32 streams a compact JSON line of live sensor, automation, and billing state over USB once per second; a single self-contained HTML page (web_dashboard/dashboard.html) connects directly to the board over USB using the browser's native Web Serial API — no server, database, or install step required. Includes live charts, a demo/preview mode with simulated data, and a button to trigger the outage-simulation command.
 
 ---
 
 ## System Architecture
 
 ```
-  [PIR] [LD2410 radar] [DHT11 x2] [INA219]
+   [PIR] [LD2410 radar] [DHT11 x2] [INA219]
         │       │          │         │
         └───────┴────┬─────┴─────────┘
                       │
@@ -42,7 +42,9 @@ Built for Engineering Team Project (ETP) at Universiti Teknologi PETRONAS (UTP).
         │              │             │
   [OLED Display]  [Relay Module]  [USB Serial — JSON
    (in-room)       → LED / Fan     telemetry, 1/sec] →
-                                    [Teammate's Dashboard App]
+                                    [dashboard.html —
+                                     Web Serial API,
+                                     runs in-browser]
 ```
 
 
@@ -75,7 +77,7 @@ Built for Engineering Team Project (ETP) at Universiti Teknologi PETRONAS (UTP).
 - **Firmware:** Arduino(software) used to program the ESP32 with a C Programming Language code
 - **Key libraries:** [`ld2410`](https://github.com/ncmreynolds/ld2410), Adafruit `INA219`, Adafruit `SSD1306` / `GFX`, Adafruit `DHT`, `Preferences` (NVS), `WiFi.h` / `WebServer.h`
 **Telemetry:** structured JSON streamed over USB serial (115200 baud), one line per second
-**Companion dashboard app:** built and maintained by a teammate; parses the USB serial telemetry to render a live dashboard
+**Dashboard:** a single self-contained HTML/CSS/JS file using the Web Serial API to read the telemetry directly in-browser — no build step, server, or database. Requires a browser with Web Serial support (Chrome or Edge, desktop)
 
 ---
 
@@ -92,9 +94,9 @@ Built for Engineering Team Project (ETP) at Universiti Teknologi PETRONAS (UTP).
 
 ```
 ├── firmware/              ESP32 Arduino sketch (main automation + billing logic)
+├── web_dashboard/          dashboard.html — browser-based live dashboard (Web Serial API)
 ├── docs/                   Circuit diagrams, architecture diagrams, demo photos
-├── report/                 Final project report (optional)
-└── media/                  Demo GIF/video
+├── report/                 Final project report 
 ```
 
 ---
@@ -106,8 +108,12 @@ Built for Engineering Team Project (ETP) at Universiti Teknologi PETRONAS (UTP).
 3. Open `firmware/smart_room_main/smart_room_main.ino`.
 4. Update pin definitions if your wiring differs (see pinout table below).
 5. Flash to an ESP32 dev board then keep it connected over USB.
-6. Open Serial Monitor at 115200 baud to see human-readable status output, or use the companion dashboard app to parse the JSON telemetry line streamed once per second and render it live.
-7. To stage a demo outage: send the text command OUTAGE over the same serial connection to shed the fan while the LED stays on essential automation; send RESTORE to return to normal.
+6. Close the Arduino IDE's Serial Monitor if it's open — only one program can hold the COM port at a time, and the dashboard will fail to connect otherwise.
+7. Open web_dashboard/dashboard.html directly in Google Chrome or Microsoft Edge on desktop (Web Serial API is not supported in Firefox/Safari or on mobile). No installation or local server needed — just open the file.
+8. Click Connect ESP32 in the dashboard header, then select the correct COM port from the browser's port picker. Live tiles and charts populate once telemetry starts arriving.
+9. Click Demo instead of connecting if you want to preview the dashboard's behavior with simulated data and no hardware attached.
+10. Click ⚡ Simulate outage to send the OUTAGE command (shedding the fan while the LED stays on essential automation); click it again to send RESTORE.
+   
 ### Pin Reference
 
 | Function | GPIO |
